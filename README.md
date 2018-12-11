@@ -10,3 +10,8 @@ Repository to store program code, configuration items, and instructions for AWS 
 * ec2OwnerInstanceReportSMTP.py
 
 * The associated CFT is: ec2_owner_instance_cft.yaml
+
+## Added the Python Script to the AMPS code folder for the RESTful API service endpoint exposed by the AMPS database.
+## The script is called the following:
+
+* ampsRestfulApiInterface.py
