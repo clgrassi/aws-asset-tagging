@@ -1,0 +1,156 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Create EC2 Owner Instance Report DynamoDB Tables, Lambdas, IAM Roles 
+Resources:
+
+  EC2OwnerInstanceLambdaRole:
+    Type: "AWS::IAM::Role"
+    Description: "EC2 OWNER INSTANCE Lambda Execution Role"
+    Properties:
+      RoleName: "EC2OwnerInstanceLambdaRole"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service:
+                - "lambda.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      Policies:
+        - PolicyName: "EC2OwnerInstanceAccessLambdaPolicy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: "Allow"
+                Action:
+                  - "dynamodb:PutItem"
+                  - "dynamodb:DeleteItem"
+                  - "dynamodb:GetItem"
+                  - "dynamodb:UpdateItem"
+                  - "dynamodb:DescribeTable"
+                  - "dynamodb:Query"
+                Resource:
+                  - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/EC2_OWNER_INSTANCE_ACCOUNTING"
+                  - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/EC2_OWNER_TAG_VALUES"
+                  - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/EC2_USER_GROUP_DATA"
+              - Effect: "Allow"
+                Action: 
+                   - "autoscaling:DescribeAutoScalingInstances"
+                   - "ec2:DescribeHostReservations"
+                   - "ec2:DescribeLaunchTemplates"
+                   - "ec2:DescribeTags"
+                   - "ec2:DescribeSpotInstanceRequests"
+                   - "ec2:DescribeNatGateways"
+                   - "ec2:DescribeCustomerGateways"
+                   - "ec2:DescribeHostReservationOfferings"
+                   - "ec2:DescribeSpotFleetRequests"
+                   - "ec2:DescribeHosts"
+                   - "ec2:DescribeImages"
+                   - "ec2:DescribeInternetGateways"
+                   - "ec2:DescribeVpcs"
+                   - "ec2:DescribeVolumes"
+                   - "ec2:DescribeFpgaImageAttribute"
+                   - "ec2:DescribeVpcEndpoints"
+                   - "ec2:DescribeSubnets"
+                   - "ec2:DescribeInstances"
+                Resource: "*"
+              - Effect: "Allow"
+                Action:
+                  - "logs:PutLogEvents"
+                  - "logs:CreateLogStream"
+                  - "logs:CreateLogGroup"
+                Resource: "arn:aws:logs:*:*:*" 
+              - Effect: "Allow"
+                Action:
+                   - "sns:Publish"
+                Resource: "arn:aws:sns:us-west-2:686137062481:ec2OwnerInstanceReport"
+              - Effect: "Allow"
+                Action: 
+                  - iam:ListGroups
+                  - iam:ListGroupsForUser
+                  - iam:ListRoles
+                  - iam:ListUsers
+                  - iam:GetGroup
+                  - iam:GetRole
+                  - iam:GetUser
+                Resource:
+                  - !Sub arn:aws:${AWS::Region}:*:iam:group 
+                  - !Sub arn:aws:${AWS::Region}:*:iam:role
+                  - !Sub arn:aws:${AWS::Region}:*:iam:user
+  ec2OwnerIdTagEnumeration:
+    Type: "AWS::Lambda::Function"
+    DependsOn:
+      - EC2OwnerInstanceLambdaRole
+      - EC2OwnereInstanceAccounting
+      - EC2OwnerTagValues
+      - EC2UserGroup
+    Properties:
+      Code:
+        S3Bucket: pge-nonprod-lambda
+        S3Key: ec2OwnerIdTagEnumeration.zip
+        S3ObjectVersion: "UBeT4VGMnUBDBZtVobH1C4eYV8HDq0.w"
+      Description: "Enumerate all of the current EC2 Owner Instances"
+      Runtime: python3.6
+      FunctionName: ec2OwnerIdTagEnumeration-CFT
+      Handler: ec2OwnerIdTagEnumeration-CFT.lambda_handler
+      MemorySize: 2048 
+      Timeout: 300
+      Role: !GetAtt EC2OwnerInstanceLambdaRole.Arn
+  ec2OwnerInstanceReportGeneration:
+    Type: "AWS::Lambda::Function"
+    DependsOn:
+      - EC2OwnerInstanceLambdaRole
+      - EC2OwnereInstanceAccounting
+      - EC2OwnerTagValues
+      - EC2UserGroup
+    Properties:
+      Code:
+        S3Bucket: pge-nonprod-lambda
+        S3Key: ec2OwnerInstanceReportGeneration.zip
+        S3ObjectVersion: "TjxfDLp3Ze0AjKeupZG0gq2gY_caAGwJ"
+      Description: "Generate a report on running EC2 Instance Tag values"
+      Runtime: python3.6
+      FunctionName: ec2OwnerInstanceReportGeneration-CFT 
+      Handler: ec2OwnerInstanceReportGeneration-CFT.lambda_handler
+      MemorySize: 2048 
+      Timeout: 300
+      Role: !GetAtt EC2OwnerInstanceLambdaRole.Arn
+  EC2OwnereInstanceAccounting:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      AttributeDefinitions:
+        - AttributeName: "InstanceId"
+          AttributeType: "S"
+      KeySchema:
+        - AttributeName: "InstanceId"
+          KeyType: "HASH"
+      ProvisionedThroughput:
+        ReadCapacityUnits: "5"
+        WriteCapacityUnits: "5"
+      TableName: "EC2_OWNER_INSTANCE_ACCOUNTING-CFT-TEST"
+  EC2OwnerTagValues:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      AttributeDefinitions:
+        - AttributeName: "InstanceId"
+          AttributeType: "S"
+      KeySchema:
+        - AttributeName: "InstanceId"
+          KeyType: "HASH"
+      ProvisionedThroughput:
+        ReadCapacityUnits: "5"
+        WriteCapacityUnits: "5"
+      TableName: "EC2_OWNER_TAG_VALUES-CFT-TEST"
+  EC2UserGroup:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      AttributeDefinitions:
+        - AttributeName: "UserId"
+          AttributeType: "S"
+      KeySchema:
+        - AttributeName: "UserId"
+          KeyType: "HASH"
+      ProvisionedThroughput:
+        ReadCapacityUnits: "5"
+        WriteCapacityUnits: "5"
+      TableName: "EC2_USER_GROUP_DATA-CFT-TEST"
